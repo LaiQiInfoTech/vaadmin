@@ -52,7 +52,7 @@ public class BooleanCheckBoxField extends BaseFormFieldComponent<Boolean> {
     }
 
     @Override
-    public void setData(Boolean data) {
+    public void setInternalData(Boolean data) {
         this.data = data == null ? Boolean.FALSE : data;
     }
 

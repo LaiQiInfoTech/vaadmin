@@ -62,7 +62,7 @@ public class IdField extends BaseFormFieldComponent<Double> {
     }
 
     @Override
-    public void setData(Double data) {
+    public void setInternalData(Double data) {
         this.data = data;
     }
 

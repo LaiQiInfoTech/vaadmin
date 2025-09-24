@@ -11,7 +11,6 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import dev.w0fv1.vaadmin.view.form.model.*;
 import dev.w0fv1.vaadmin.view.form.component.*;
-import jakarta.validation.constraints.Size;
 import lombok.extern.slf4j.Slf4j;
 import org.reflections.ReflectionUtils;
 
@@ -20,6 +19,7 @@ import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.function.Predicate;
 
 import static dev.w0fv1.vaadmin.view.tools.Notifier.showNotification;
 import static org.reflections.ReflectionUtils.getAllFields;
@@ -37,6 +37,8 @@ public abstract class BaseForm<F extends BaseFormModel> extends VerticalLayout {
     private final Boolean isUpdate;
 
     private final List<BaseFormFieldComponent<?>> fieldComponents = new ArrayList<>();
+    // 新增：用于快速通过字段名查找 BaseFormFieldComponent 实例的映射
+    private final Map<String, BaseFormFieldComponent<?>> fieldNameToComponentMap = new HashMap<>();
 
     protected BaseForm(F fromModel, Boolean isUpdate) {
         if (fromModel == null) {
@@ -58,6 +60,7 @@ public abstract class BaseForm<F extends BaseFormModel> extends VerticalLayout {
         initTitle();
         initDataForm();
         initAction();
+        evaluateAllConditionalField();
     }
 
 
@@ -80,6 +83,15 @@ public abstract class BaseForm<F extends BaseFormModel> extends VerticalLayout {
         }
 
         fieldComponents.clear();
+    }
+
+    private void evaluateAllConditionalField() {
+        log.debug("开始对所有字段进行初始可见性评估。");
+        for (BaseFormFieldComponent<?> fieldComponent : fieldComponents) {
+            // 传递 null 给 changedField，表示这是一次全局的（非某个特定字段变更引起的）评估
+            fieldComponent.applyFormVisibilityCondition(null, this.model);
+        }
+        log.debug("所有字段初始可见性评估完成。");
     }
 
 
@@ -146,15 +158,31 @@ public abstract class BaseForm<F extends BaseFormModel> extends VerticalLayout {
         handleTextTransform();
 
         log.info(model.toString());
+        // ===== 新增：调用 beforeSave =====
+        if (!beforeSave(model)) {
+            // 子类若返回 false，就不再继续保存，且给个提示
+            showNotification("保存前检查未通过，请检查", NotificationVariant.LUMO_ERROR);
+            return;
+        }
+        // ===== 新增：调用 beforeSave =====
+        if (!beforeSave(model)) {
+            // 子类若返回 false，就不再继续保存，且给个提示
+            showNotification("保存前校验未通过，请检查", NotificationVariant.LUMO_ERROR);
+            return;
+        }
 
-        Boolean onSaveResult = this.onSave(model);
+        Boolean onSaveResult = this.save(model);
 
         if (onSaveResult) {
             this.clear();
         }
     }
 
-    abstract public Boolean onSave(F data);
+    abstract public Boolean save(F data);
+
+    protected boolean beforeSave(F data) {
+        return true;
+    }
 
     /**
      * 针对标记了 @TextTransform 的字段进行处理
@@ -203,6 +231,9 @@ public abstract class BaseForm<F extends BaseFormModel> extends VerticalLayout {
             fieldComponent.setFormModel(this.model);
             fieldComponent.clear();
         }
+        evaluateAllConditionalField();
+
+        // 数据清空并重置后，重新设置自定义行为，以更新UI联动状态
     }
 
 
@@ -222,6 +253,7 @@ public abstract class BaseForm<F extends BaseFormModel> extends VerticalLayout {
                     FormField annotation = f.getAnnotation(FormField.class);
                     return annotation != null ? annotation.order() : 100;
                 }))
+                .filter(field -> !field.isAnnotationPresent(FormIgnore.class))
                 .toList();
 
         for (Field field : fieldList) {
@@ -246,11 +278,25 @@ public abstract class BaseForm<F extends BaseFormModel> extends VerticalLayout {
             }
 
             log.debug("字段 [{}] 符合构建条件，开始生成组件", field.getName());
-            add(mapComponent(field));
+            BaseFormFieldComponent<?> fieldComponent = mapComponent(field); // mapComponent 会将组件加入 fieldComponents
+            fieldComponent.addFormDataChangeListener(fieldValueChangeListener);
+            // 将组件添加到当前 BaseForm 布局中
+            add(fieldComponent);
+
+            // 【新增】存储字段名到组件的映射
+            fieldNameToComponentMap.put(field.getName(), fieldComponent);
+
         }
 
         log.debug("数据表单初始化完成，处理字段总数：{}", fieldList.size());
     }
+
+    BaseFormFieldComponent.FormDataChangeListener fieldValueChangeListener = (field, formModel) -> {
+        for (BaseFormFieldComponent<?> fieldComponent : fieldComponents) {
+            log.debug("字段值改变，字段：{}", field.getName());
+            fieldComponent.applyFormVisibilityCondition(field, formModel);
+        }
+    };
 
     /**
      * 根据字段类型映射生成对应的表单组件。
@@ -258,13 +304,13 @@ public abstract class BaseForm<F extends BaseFormModel> extends VerticalLayout {
      * @param field 字段
      * @return 对应的组件
      */
-    private Component mapComponent(Field field) {
+    private BaseFormFieldComponent<?> mapComponent(Field field) {
         log.debug("开始映射字段 [{}] 到表单组件", field.getName());
 
 
         log.debug("mapComponentmapComponentmapComponent model 开始映射字段 [{}] 到表单组件", this.model);
 
-        BaseFormFieldComponent<?> formFieldComponent = this.extandMapComponent(field, this.model);
+        BaseFormFieldComponent<?> formFieldComponent = this.extendMapComponent(field, this.model);
         if (formFieldComponent != null) {
             log.debug("字段 [{}] 通过 extMapComponent 扩展方法自定义生成了组件：{}", field.getName(), formFieldComponent.getClass().getSimpleName());
             fieldComponents.add(formFieldComponent);
@@ -351,8 +397,17 @@ public abstract class BaseForm<F extends BaseFormModel> extends VerticalLayout {
         return formFieldComponent;
     }
 
+    /**
+     * 【新增】通过字段名获取 BaseFormFieldComponent 实例。
+     *
+     * @param fieldName 字段的名称
+     * @return 对应的 BaseFormFieldComponent 实例，如果不存在则返回 null
+     */
+    protected BaseFormFieldComponent<?> getFieldComponent(String fieldName) {
+        return fieldNameToComponentMap.get(fieldName);
+    }
 
-    BaseFormFieldComponent<?> extandMapComponent(Field field, F formModel) {
+    BaseFormFieldComponent<?> extendMapComponent(Field field, F formModel) {
         return null;
     }
 
@@ -375,12 +430,10 @@ public abstract class BaseForm<F extends BaseFormModel> extends VerticalLayout {
     public void setDefaultModel(F defaultModel) {
         this.defaultModel = defaultModel;
         this.model = defaultModel.copy();
-        clear();
         removeAllUi();
         initialize();
         log.debug("调用 setDefaultModel()，已设置 defaultModel，并清空表单数据，defaultModel 内容：{}", this.model);
     }
-
 
     private Component extTitle() {
         return new Div();

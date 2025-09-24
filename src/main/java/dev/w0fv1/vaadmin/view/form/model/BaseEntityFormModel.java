@@ -7,17 +7,17 @@ import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 
-public interface BaseEntityFormModel<E extends BaseManageEntity<ID>, ID> extends BaseFormModel {
-    ID getId();
+public abstract class BaseEntityFormModel<E extends BaseManageEntity<ID>, ID> extends BaseFormModel {
+    public abstract ID getId();
 
-    void setId(ID id);
+    public abstract void setId(ID id);
 
-    E toEntity();
+    public abstract E toEntity();
 
-    void translate(E model);
+    public abstract void translate(E model);
 
 
-    default Class<E> getEntityClass() {
+    public Class<E> getEntityClass() {
         try {
             Method method = this.getClass().getMethod("toEntity");
             Type returnType = method.getGenericReturnType();
@@ -37,8 +37,7 @@ public interface BaseEntityFormModel<E extends BaseManageEntity<ID>, ID> extends
     }
 
 
-
-    default public GenericRepository.PredicateBuilder<E> getEntityPredicateBuilder() {
+    public GenericRepository.PredicateBuilder<E> getEntityPredicateBuilder() {
         return null;
     }
 }

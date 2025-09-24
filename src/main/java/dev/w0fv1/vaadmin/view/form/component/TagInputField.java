@@ -50,7 +50,7 @@ public class TagInputField extends BaseFormFieldComponent<List<String>> {
     }
 
     @Override
-    public void setData(List<String> data) {
+    public void setInternalData(List<String> data) {
         this.data.clear();
 
         if (data != null) {

@@ -47,7 +47,7 @@ public class StringIdField extends BaseFormFieldComponent<String> {
     }
 
     @Override
-    public void setData(String data) {
+    public void setInternalData(String data) {
         this.data = data == null ? "" : data;
     }
 

@@ -4,6 +4,7 @@ import dev.w0fv1.vaadmin.view.form.model.BaseFormModel;
 import com.vaadin.flow.component.combobox.ComboBox;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
 /**
  * SingleEnumSelectBoxField
@@ -22,21 +23,41 @@ public class SingleEnumSelectBoxField extends BaseFormFieldComponent<Enum<?>> {
 
     @Override
     void initStaticView() {
-        this.comboBox = new ComboBox<>();
-        this.comboBox.setItems((Enum<?>[]) getField().getType().getEnumConstants());
-        this.comboBox.setPlaceholder("请选择 " + getFormField().title());
-        this.comboBox.setId(getField().getName());
-        this.comboBox.setWidthFull();
-        this.comboBox.setEnabled(getFormField().enabled());
+        comboBox = new ComboBox<>();
 
-        this.comboBox.addValueChangeListener(event -> {
-            setData(event.getValue());
-        });
+        Class<?> enumType = getField().getType();
+        comboBox.setItems((Enum<?>[]) enumType.getEnumConstants());
 
-        add(this.comboBox);
+        // 关键：告诉 ComboBox 该怎么把枚举转换成文字
+        comboBox.setItemLabelGenerator(this::buildLabel);
+
+        comboBox.setPlaceholder("请选择 " + getFormField().title());
+        comboBox.setId(getField().getName());
+        comboBox.setWidthFull();
+        comboBox.setEnabled(getFormField().enabled());
+
+        comboBox.addValueChangeListener(e -> setData(e.getValue()));
+        add(comboBox);
     }
 
+    /** 把枚举常量转换成 “NAME - 字段1, 字段2 ...” */
+    private String buildLabel(Enum<?> e) {
+        if (e == null) return "";
 
+        StringBuilder sb = new StringBuilder(e.name());           // ① 先放常量名
+
+        for (Field f : e.getClass().getDeclaredFields()) {        // ② 反射拿所有非 static 字段
+            if (f.isSynthetic() || Modifier.isStatic(f.getModifiers())) continue;
+            f.setAccessible(true);
+            try {
+                Object v = f.get(e);
+                if (v != null) {                                  // ③ 追加字段值
+                    sb.append(" - ").append(v);
+                }
+            } catch (IllegalAccessException ignored) {}
+        }
+        return sb.toString();
+    }
 
     @Override
     public void pushViewData() {
@@ -55,7 +76,7 @@ public class SingleEnumSelectBoxField extends BaseFormFieldComponent<Enum<?>> {
     }
 
     @Override
-    public void setData(Enum<?> data) {
+    public void setInternalData(Enum<?> data) {
         this.data = data;
     }
 

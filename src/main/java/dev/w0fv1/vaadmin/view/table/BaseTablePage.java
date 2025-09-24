@@ -18,17 +18,19 @@ import dev.w0fv1.vaadmin.view.table.component.TextTableFieldComponent;
 import dev.w0fv1.vaadmin.view.table.model.BaseTableModel;
 import dev.w0fv1.vaadmin.view.table.model.TableConfig;
 import dev.w0fv1.vaadmin.view.table.model.TableField;
+import dev.w0fv1.vaadmin.view.tools.UITimer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.reflections.ReflectionUtils;
 
 import java.lang.reflect.Field;
 import java.util.*;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static dev.w0fv1.vaadmin.util.JsonUtil.toPrettyJson;
 import static java.lang.reflect.Modifier.PRIVATE;
+import static org.apache.commons.lang3.StringUtils.truncate;
 import static org.reflections.ReflectionUtils.getAllFields;
 
 @Slf4j
@@ -38,6 +40,8 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
     private final TableConfig tableConfig;
 
     protected final Grid<T> grid = new Grid<>();
+    private final String gridId = "a" + UUID.randomUUID().toString().replaceAll("-", "");
+
     protected final TextField likeSearchInput = new TextField();
 
     protected ConfigurableFilterDataProvider<T, Void, String> provider;
@@ -50,6 +54,9 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
     private HorizontalLayout titleBar;
     @Getter
     private HorizontalLayout secondaryAction;
+
+    private HorizontalLayout filtersBar;          // 整体容器
+    private HorizontalLayout filtersRight;        // 右侧扩展位
     @Getter
     private HorizontalLayout dataActions;
     @Getter
@@ -71,7 +78,7 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
 
         buildTitleBar();
         buildSecondaryAction();
-        buildLikeSearchBar();
+        buildFiltersBar();
         buildDataActions();
         buildGridColumns();
 
@@ -81,6 +88,7 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
         staticViewBuilt = true;
     }
 
+
     /**
      * 2. 初始化数据组件，必须调用super.initData()
      */
@@ -88,21 +96,50 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
         if (dataInitialized) return;
 
 
-        grid.setPageSize(tableConfig.pageSize());   // ← 关键
+//        grid.setPageSize(tableConfig.pageSize());   // ← 关键
 
         if (tableConfig.allRowsVisible()) {
             grid.setAllRowsVisible(true);
-        } else {
-            grid.setHeight("800px");
         }
 
         provider = DataProvider.fromFilteringCallbacks(this::fetch, this::count)
                 // 使用默认 FilterCombiner，避免 NPE
                 .withConfigurableFilter();
         grid.setItems(provider);
+        grid.setId(gridId);
 
         dataInitialized = true;
+        if (tableConfig.autoScrollRight()) {
+            scrollRightOnSizeChanged(grid);
+        }
     }
+
+    /**
+     * 横向滚到最右列（仅执行一次）。
+     * 依赖 Grid 内部 #scroller / .vaadin-grid__scroller 容器。
+     */
+    public static void scrollRightOnSizeChanged(Grid<?> grid) {
+        grid.getElement().addAttachListener(e ->
+                grid.getElement().executeJs(
+                        """
+                                const grid = this;
+                                const scrollRight = () => {
+                                  const s = grid.shadowRoot.querySelector('#scroller');
+                                  const t = grid.shadowRoot.querySelector('#table');
+                                
+                                  if (t) {
+                                      t.scrollLeft = t.scrollWidth;
+                                  }
+                                };
+                                // 执行一次，万一 size-changed 已发生
+                                requestAnimationFrame(scrollRight);
+                                // 下次列宽变化再滚一次
+                                grid.addEventListener('size-changed', scrollRight);
+                                """
+                )
+        );
+    }
+
 
     /**
      * 3. 将数据推送至UI展示层，需幂等
@@ -174,6 +211,10 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
                 col.setFrozen(true);      // → 冻结到左边
                 // 如需禁止用户拖动改变顺序，可再加：col.setReorderable(false);
             }
+            if (tf != null && (tf.sortable() || tf.id())) {
+                col.setSortable(true);
+            }
+
         }
         extendGridColumns();
         grid.addItemClickListener(e -> onItemClicked(e.getItem()));
@@ -182,11 +223,36 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
     }
 
     private Component buildSpanCell(T item, Field f) {
-        String val = getFieldStringValue(item, f, 25);
-        Span s = new Span(val);
-        s.getStyle().set("cursor", "pointer");
-        s.addClickListener(ev -> onFieldClick(item, f, val));
-        return s;
+        try {
+            Object value = f.get(item);
+            String displayValue;
+
+            if (value == null) {
+                displayValue = "-";
+            } else if (value instanceof Collection<?> coll) {
+                // 检查是否为枚举集合
+                if (!coll.isEmpty() && coll.iterator().next() instanceof Enum<?>) {
+                    displayValue = coll.stream()
+                            .map(v -> ((Enum<?>) v).name())  // 或 getDisplayName() 如果实现接口
+                            .reduce((a, b) -> a + ", " + b)
+                            .orElse("-");
+                } else {
+                    displayValue = coll.toString(); // 非枚举集合
+                }
+            } else if (value.getClass().isEnum()) {
+                displayValue = ((Enum<?>) value).name();
+            } else {
+                displayValue = value.toString();
+            }
+
+            Span span = new Span(truncate(displayValue, 25));
+            span.getStyle().set("cursor", "pointer");
+            span.addClickListener(ev -> onFieldClick(item, f, value));
+            return span;
+
+        } catch (IllegalAccessException e) {
+            return new Span("Error");
+        }
     }
 
     private Comparable<?> getComparableFieldValue(T item, Field f) {
@@ -212,31 +278,57 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
         add(secondaryAction);
     }
 
+    // ① 新扩展方法（默认空实现）
+    public Component extendDataFilters() {
+        return new Div();   // 子类可返回任意组件或布局
+    }
+
+    public void addDataFilters(Component... components) {
+        if (filtersRight != null) {
+            filtersRight.add(components);
+        }
+    }
+
     /**
-     * 构建模糊搜索栏：
-     * - 在同一行（HorizontalLayout）中，最左侧放文字标识，紧接输入框，最后是搜索按钮。
+     * 构建搜索 + 其它过滤器的总栏
      */
-    private void buildLikeSearchBar() {
-        if (!tableConfig.likeSearch()) return;
+    private void buildFiltersBar() {
 
-        // 创建布局，保证三元素同行显示
-        HorizontalLayout likeSearchBar = new HorizontalLayout();
-        likeSearchBar.setAlignItems(Alignment.CENTER);
+        // 根容器：撑满一行
+        filtersBar = new HorizontalLayout();
+        filtersBar.setWidthFull();
+        filtersBar.setAlignItems(Alignment.CENTER);
+        filtersBar.setJustifyContentMode(JustifyContentMode.BETWEEN); // 左右对齐
 
-        // 文字标识
-        Span label = new Span("关键字搜索：");
+        /* ---------- 左侧：关键字搜索 ---------- */
+        if (tableConfig.likeSearch()) {
+            HorizontalLayout likeSearchBar = new HorizontalLayout();
+            likeSearchBar.setAlignItems(Alignment.CENTER);
 
-        // 输入框
-        likeSearchInput.setPlaceholder("搜索 " + getLikeSearchFieldNames());
-        likeSearchInput.addValueChangeListener(e -> applyFilter(e.getValue())); // 原有即时过滤逻辑保留
+            Span label = new Span("关键字搜索：");
 
-        // 搜索按钮
-        Button searchButton = new Button(VaadinIcon.SEARCH.create(), e -> applyFilter(likeSearchInput.getValue()));
-        searchButton.getElement().setAttribute("title", "搜索");
+            likeSearchInput.setPlaceholder("搜索 " + getLikeSearchFieldNames());
+            likeSearchInput.addValueChangeListener(
+                    e -> applyFilter(e.getValue())
+            );
 
-        // 组装并添加进页面
-        likeSearchBar.add(label, likeSearchInput, searchButton);
-        add(likeSearchBar);
+            Button searchButton = new Button(
+                    VaadinIcon.SEARCH.create(),
+                    e -> applyFilter(likeSearchInput.getValue())
+            );
+            searchButton.getElement().setAttribute("title", "搜索");
+
+            likeSearchBar.add(label, likeSearchInput, searchButton);
+
+            filtersBar.add(likeSearchBar);          // ← 左侧加入
+        }
+
+        /* ---------- 右侧：扩展过滤组件 ---------- */
+        filtersRight = new HorizontalLayout();
+        filtersRight.add(extendDataFilters());     // 子类自定义内容
+        filtersBar.add(filtersRight);
+
+        add(filtersBar);                           // 整体挂到页面
     }
 
 
@@ -244,8 +336,8 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
         dataActions = new HorizontalLayout();
         dataActions.setWidthFull(); // 关键：让 HorizontalLayout 占满宽度
 
-        if (enableCreate()) dataActions.add(new Button("创建", e -> onCreateEvent()));
         dataActions.add(extendDataAction());
+        if (enableCreate()) dataActions.add(new Button("创建", e -> onCreateEvent()));
         dataActions.setJustifyContentMode(JustifyContentMode.END);
         add(dataActions);
     }
@@ -253,7 +345,25 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
     private String getFieldStringValue(T item, Field f, int max) {
         try {
             Object v = f.get(item);
-            return v == null ? "-" : (v instanceof Map<?, ?> m ? toPrettyJson(m) : v.toString()).substring(0, Math.min(max, v.toString().length())) + (v.toString().length() > max ? "…" : "");
+            switch (v) {
+                case null -> {
+                    return "-";
+                }
+                case Map<?, ?> m -> {
+                    return toPrettyJson(m);
+                }
+                case Collection<?> coll when !coll.isEmpty() && coll.iterator().next() instanceof Enum<?> -> {
+                    String combined = coll.stream().map(e -> ((Enum<?>) e).name()).reduce((a, b) -> a + ", " + b).orElse("-");
+                    return truncate(combined, max);
+                }
+                default -> {
+                }
+            }
+
+            if (v.getClass().isEnum()) return ((Enum<?>) v).name();
+
+            String str = v.toString();
+            return truncate(str, max);
         } catch (IllegalAccessException e) {
             return "Error";
         }
@@ -377,11 +487,11 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
     }
 
     public void onFieldClick(T item, Field field, Object value) {
-        // 判断是否有 @TableFieldComponent 注解且启用
+        // 判断是否有 @TableField 注解
         TableField tableField = field.getAnnotation(TableField.class);
         BaseFieldComponent<?> fieldComponent = null;
 
-        // 默认只处理 String 类型
+        // 默认仅处理 String 类型
         if (value instanceof String || tableField == null) {
             fieldComponent = new TextTableFieldComponent(field, getFieldStringValue(item, field, 200000));
         }
@@ -390,27 +500,39 @@ public abstract class BaseTablePage<T extends BaseTableModel> extends VerticalLa
             return;
         }
 
+        // 创建 Dialog
         Dialog dialog = new Dialog();
+        dialog.setModal(true);
+        dialog.setDraggable(true);
+        dialog.setResizable(true);
+        dialog.setWidthFull();
+        dialog.setMaxWidth("600px");
+        dialog.setMaxHeight("80vh");
 
-        String label = "";
-
+        // 处理标题
+        String label;
         if (tableField != null && tableField.displayName() != null && !tableField.displayName().isEmpty()) {
             label = tableField.displayName();
         } else {
             label = field.getName();
         }
-
         dialog.setHeaderTitle("字段详情: " + label);
-        dialog.setModal(true);
-        dialog.setWidth("400px");
 
-        dialog.add(fieldComponent);
+        // 创建滚动内容区域
+        Div contentWrapper = new Div(fieldComponent);
+        contentWrapper.getStyle()
+                .set("overflow", "auto")
+                .set("max-height", "60vh");
 
+        dialog.add(contentWrapper);
+
+        // 添加底部关闭按钮
         Button close = new Button("关闭", e -> dialog.close());
         dialog.getFooter().add(close);
 
         dialog.open();
     }
+
 
     public Boolean enableCreate() {
         return true;

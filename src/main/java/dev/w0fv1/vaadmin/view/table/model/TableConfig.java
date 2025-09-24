@@ -9,10 +9,14 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface TableConfig {
     public String title() default "";
+
     public String description() default "";
 
     boolean likeSearch() default false;
 
     int pageSize() default 50;
+
     boolean allRowsVisible() default false;
+
+    boolean autoScrollRight() default true;
 }

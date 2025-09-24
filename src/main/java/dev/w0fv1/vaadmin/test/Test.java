@@ -1,11 +1,11 @@
 package dev.w0fv1.vaadmin.test;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 public class Test {
     public static void main(String[] args) {
-        EchoT echo = new EchoT();
-        System.out.println("EchoT"+echo.getEntityClass().getName());
 
-        EchoF echoF = new EchoF();
-        System.out.println("EchoF"+echoF.getEntityClass().getName());
+
     }
 }

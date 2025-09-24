@@ -66,7 +66,7 @@ public class BigDecimalInputField extends BaseFormFieldComponent<BigDecimal> {
     }
 
     @Override
-    public void setData(BigDecimal data) {
+    public void setInternalData(BigDecimal data) {
         this.data = (data == null) ? BigDecimal.ZERO : data;
     }
 

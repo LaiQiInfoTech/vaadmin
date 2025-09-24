@@ -43,7 +43,8 @@ public class JsonUtil {
             if (obj instanceof HibernateProxy) {
                 obj = Hibernate.unproxy(obj);
             }
-            Map<String, Object> map = objectMapper.convertValue(obj, new TypeReference<Map<String, Object>>() {});
+            Map<String, Object> map = objectMapper.convertValue(obj, new TypeReference<Map<String, Object>>() {
+            });
             if (map == null) {
                 return new HashMap<>();
             }
@@ -59,7 +60,7 @@ public class JsonUtil {
      * @param map 输入HashMap
      * @return 格式化后的JSON字符串
      */
-    public static String toPrettyJson(Map<?,?> map) {
+    public static String toPrettyJson(Map<?, ?> map) {
         if (map == null) {
             return "{}";
         }
@@ -71,5 +72,17 @@ public class JsonUtil {
         } catch (JsonProcessingException e) {
             throw new RuntimeException("HashMap转格式化JSON失败", e);
         }
+    }
+
+    public static String toJsonString(Object o) {
+        String json = "";
+
+        try {
+            json = objectMapper.writeValueAsString(o);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return json;
     }
 }

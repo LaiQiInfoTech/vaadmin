@@ -9,6 +9,7 @@ import dev.w0fv1.vaadmin.GenericRepository;
 import dev.w0fv1.vaadmin.GenericRepository.SortOrder;
 import dev.w0fv1.vaadmin.entity.BaseManageEntity;
 import dev.w0fv1.vaadmin.view.BasePage;
+import dev.w0fv1.vaadmin.view.InfoTable;
 import dev.w0fv1.vaadmin.view.form.RepositoryForm;
 import dev.w0fv1.vaadmin.view.form.model.BaseEntityFormModel;
 import dev.w0fv1.vaadmin.view.table.model.BaseEntityTableModel;
@@ -24,10 +25,9 @@ import org.hibernate.query.criteria.JpaExpression;
 import org.springframework.transaction.support.TransactionCallback;
 import com.vaadin.flow.data.provider.QuerySortOrder;
 
+import java.lang.reflect.Field;
 import java.util.*;
 import java.util.stream.Collectors;
-
-import static dev.w0fv1.vaadmin.view.table.model.TableField.SqlType.JSONB;
 
 @Slf4j
 public abstract class BaseRepositoryTablePage<
@@ -37,7 +37,6 @@ public abstract class BaseRepositoryTablePage<
         ID> extends BaseTablePage<T> implements BasePage {
 
     @Getter
-    @Resource
     protected GenericRepository genericRepository;
 
     @Getter
@@ -50,20 +49,29 @@ public abstract class BaseRepositoryTablePage<
     private final Class<T> tableClass;
 
     private Dialog createDialog;
-    private RepositoryForm<F, E, ID> formInstance;
+    private RepositoryForm<F, E, ID> createFormInstance;
+    @Getter
+    private F defaultFormModel;
 
-    private final F defaultFormModel;
 
-    public BaseRepositoryTablePage(Class<T> tableClass, Class<F> formClass, Class<E> entityClass) {
-        this(tableClass, formClass, null, entityClass);
+    List<SortOrder> sortOrders = new ArrayList<>();
+
+    public void setSortOrders(List<SortOrder> sortOrders) {
+        this.sortOrders = sortOrders;
+        refresh();
     }
 
-    public BaseRepositoryTablePage(Class<T> tableClass, F formModel, Class<E> entityClass) {
-        this(tableClass, (Class<F>) formModel.getClass(), formModel, entityClass);
+    public BaseRepositoryTablePage(GenericRepository genericRepository, Class<T> tableClass, Class<F> formClass, Class<E> entityClass) {
+        this(genericRepository, tableClass, formClass, null, entityClass);
     }
 
-    public BaseRepositoryTablePage(Class<T> tableClass, Class<F> formClass, F formModel, Class<E> entityClass) {
+    public BaseRepositoryTablePage(GenericRepository genericRepository, Class<T> tableClass, F formModel, Class<E> entityClass) {
+        this(genericRepository, tableClass, (Class<F>) formModel.getClass(), formModel, entityClass);
+    }
+
+    public BaseRepositoryTablePage(GenericRepository genericRepository, Class<T> tableClass, Class<F> formClass, F formModel, Class<E> entityClass) {
         super(tableClass);
+        this.genericRepository = genericRepository;
         this.entityClass = entityClass;
         this.formClass = formClass;
         this.tableClass = tableClass;
@@ -78,11 +86,6 @@ public abstract class BaseRepositoryTablePage<
         this.defaultFormModel = formModel;
     }
 
-    @PostConstruct
-    private void afterInject() {
-        createDialog = buildCreateDialog();
-        add(createDialog);
-    }
 
     @Override
     public void initialize() {
@@ -90,6 +93,7 @@ public abstract class BaseRepositoryTablePage<
         predicateManager.addAllPredicates(extendPredicateBuilders);
         super.initialize(); // 构建 UI
         buildRepositoryActionColumn();
+        buildCreateDialog();
         onBuild();
     }
 
@@ -101,21 +105,24 @@ public abstract class BaseRepositoryTablePage<
         // 子类可在保存后处理
     }
 
-    private Dialog buildCreateDialog() {
+    private void buildCreateDialog() {
         Dialog dialog = new Dialog();
         try {
-            formInstance = new RepositoryForm<>(
+            createFormInstance = new RepositoryForm<>(
                     defaultFormModel,
+                    this::beforeSave,
                     id -> handleSave(id, dialog),
                     () -> handleCancel(dialog),
                     genericRepository
             );
-            formInstance.initialize();
-            dialog.add(new VerticalLayout(formInstance));
+            createFormInstance.initialize();
+            dialog.add(new VerticalLayout(createFormInstance));
         } catch (Exception e) {
             throw new RuntimeException("无法创建 RepositoryForm 实例", e);
         }
-        return dialog;
+        createDialog = dialog;
+        add(createDialog);
+
     }
 
     private void handleSave(ID id, Dialog dialog) {
@@ -131,10 +138,28 @@ public abstract class BaseRepositoryTablePage<
 
     public void buildRepositoryActionColumn() {
         if (enableUpdate()) {
+            super.extendGridComponentColumn(this::createShowDetailButton)
+                    .setHeader("详情")
+                    .setAutoWidth(true);
+
             super.extendGridComponentColumn(this::createUpdateButton)
                     .setHeader("更新")
                     .setAutoWidth(true);
         }
+    }
+
+    private Component createShowDetailButton(T t) {
+        Button button = new Button("详情");
+        button.addClickListener(event -> {
+            Dialog updateDialog = new Dialog();
+
+            InfoTable infoTable = InfoTable.of(t);
+            updateDialog.add(infoTable);
+
+            add(updateDialog);
+            updateDialog.open();
+        });
+        return button;
     }
 
     private Component createUpdateButton(T t) {
@@ -142,7 +167,8 @@ public abstract class BaseRepositoryTablePage<
         button.addClickListener(event -> {
             Dialog updateDialog = new Dialog();
             RepositoryForm<F, E, ID> form = new RepositoryForm<>(
-                    (F) t.toFormModel(),
+                    (F) t.toFormModel(defaultFormModel),
+                    this::beforeSave,
                     id -> handleSave(id, updateDialog),
                     () -> handleCancel(updateDialog),
                     genericRepository
@@ -157,6 +183,7 @@ public abstract class BaseRepositoryTablePage<
 
     @Override
     public void onCreateEvent() {
+        createFormInstance.setDefaultModel(defaultFormModel); // 确保是最新默认
         createDialog.open();
     }
 
@@ -169,7 +196,9 @@ public abstract class BaseRepositoryTablePage<
             try {
                 buildLikeSearchPredicate(filter);
                 predicateManager.addAllPredicates(extendPredicateBuilders);
-                List<SortOrder> sortOrders = querySortOrders.stream().map(SortOrder::new).toList();
+                List<SortOrder> sortOrders = querySortOrders.isEmpty()
+                        ? this.sortOrders.isEmpty() ? getDefaultSortOrders() : this.sortOrders                          // ← 用默认
+                        : querySortOrders.stream().map(SortOrder::new).toList();
 
                 int page = offset / limit;
 
@@ -215,81 +244,71 @@ public abstract class BaseRepositoryTablePage<
      * 显式指定 SQL 类型；若未指定，则自动根据 Java 类型推断，
      * 且 <b>List 类型默认视为 JSONB</b>。</p>
      */
+    // Add this helper method to your BaseRepositoryTablePage class
+    private TableField findTableFieldAnnotation(String fieldKey) {
+        return Arrays.stream(tableClass.getDeclaredFields())
+                .filter(f -> f.isAnnotationPresent(TableField.class))
+                .filter(f -> {
+                    TableField tf = f.getAnnotation(TableField.class);
+                    // Use the 'key' if specified, otherwise the field name.
+                    String key = tf.key().isEmpty() ? f.getName() : tf.key();
+                    return key.equals(fieldKey);
+                })
+                .map(f -> f.getAnnotation(TableField.class))
+                .findFirst()
+                .orElse(null);
+    }
+    /**
+     * Constructs a fuzzy search predicate based on the provided filter text.
+     *
+     * <p>This method implements a universal solution for PostgreSQL by ensuring that
+     * any non-string column (e.g., bigint, numeric, jsonb) is explicitly cast
+     * to 'text' using the native text() function before applying the 'LOWER'
+     * and 'LIKE' operations. This prevents "function lower(type) does not exist" errors.</p>
+     */
     private void buildLikeSearchPredicate(String filter) {
-
-        // 1. 先移除旧的 likeSearch 谓词，避免多次叠加
+        // 1. Remove any previous search predicate to avoid conflicts.
         predicateManager.removePredicate("likeSearch");
 
-        // 2. 空串直接返回
+        // 2. If the filter is empty, there's nothing to do.
         if (filter == null || filter.isBlank()) {
             return;
         }
 
-        // 3. 统一处理成小写模糊匹配串
+        // 3. Prepare the lowercase search pattern for case-insensitive matching.
         final String lowerPattern = "%" + filter.toLowerCase() + "%";
 
         predicateManager.putPredicate("likeSearch", (cb, root, predicates) -> {
-
             List<Predicate> likes = new ArrayList<>();
 
-            // 当前实体类型，用于反射读取字段注解
-            Class<?> entityClass = root.getModel().getBindableJavaType();
-
-            // 遍历所有开启 likeSearch 的字段
-            for (String field : super.getLikeSearchFieldNames()) {
-
-                Path<?> path = root.get(field);
-                Class<?> javaType = path.getJavaType();
-
-                /*---------------------------------- 读取 @TableField.sqlType() ----------------------------------*/
-                TableField.SqlType sqlType = TableField.SqlType.AUTO;
+            // 4. Iterate over all field names designated for fuzzy search.
+            for (String fieldName : super.getLikeSearchFieldNames()) {
                 try {
-                    java.lang.reflect.Field entityField = entityClass.getDeclaredField(field);
-                    TableField tfAnno = entityField.getAnnotation(TableField.class);
-                    if (tfAnno != null) {
-                        sqlType = tfAnno.sqlType();
-                    }
-                } catch (NoSuchFieldException ignore) {
-                }
+                    Path<?> path = root.get(fieldName);
+                    Class<?> javaType = path.getJavaType();
 
-                /*---------------------------------- AUTO 模式下：按 Java 类型推断 ----------------------------------*/
-                if (sqlType == TableField.SqlType.AUTO) {
+                    Expression<String> expressionForLike;
+
+                    // 5. Determine if an explicit cast to text is needed.
                     if (String.class.isAssignableFrom(javaType)) {
-                        sqlType = TableField.SqlType.TEXT;
-                    } else if (Number.class.isAssignableFrom(javaType)
-                            || java.time.temporal.Temporal.class.isAssignableFrom(javaType)
-                            || java.util.Date.class.isAssignableFrom(javaType)
-                            || javaType.isEnum()) {
-                        sqlType = TableField.SqlType.NUMERIC;
-                    } else if (java.util.List.class.isAssignableFrom(javaType)) {
-                        // List 默认当作 jsonb
-                        sqlType = TableField.SqlType.JSONB;
+                        // The column is already a text type in the database, no cast is needed.
+                        expressionForLike = path.as(String.class);
                     } else {
-                        // 兜底仍然按 TEXT 处理
-                        sqlType = TableField.SqlType.TEXT;
+                        // For ANY other type (Long, Integer, BigDecimal, jsonb-backed objects, etc.),
+                        // we MUST explicitly cast it to text using PostgreSQL's native `text()` function.
+                        // This generates SQL like: lower(text(column_name))
+                        expressionForLike = cb.function("text", String.class, path);
                     }
+
+                    // 6. Apply the LOWER function and the LIKE predicate.
+                    likes.add(cb.like(cb.lower(expressionForLike), lowerPattern));
+
+                } catch (IllegalArgumentException e) {
+                    log.warn("Could not build like predicate for field '{}' in entity '{}': {}", fieldName, entityClass.getSimpleName(), e.getMessage());
                 }
-
-                /*---------------------------------- 根据 sqlType 生成表达式 ----------------------------------*/
-                Expression<String> expr;
-                switch (sqlType) {
-                    case JSONB -> {
-                        // json / jsonb 必须先 ::text 再 ILIKE
-                        expr = cb.lower(cb.function("jsonb_pretty", String.class, path));
-                    }
-                    case NUMERIC ->                                // bigint/decimal/enum/date
-                            expr = cb.lower(((JpaExpression<?>) path).cast(String.class));
-
-                    default -> {
-                        // 其他都让 Hibernate 自动 cast 为 varchar
-                        expr = cb.lower(path.as(String.class));
-                    }
-                }
-
-                likes.add(cb.like(expr, lowerPattern));
             }
 
-            // 收敛成 OR
+            // 7. Combine all individual LIKE conditions with an OR.
             if (!likes.isEmpty()) {
                 predicates.add(cb.or(likes.toArray(new Predicate[0])));
             }
@@ -323,12 +342,19 @@ public abstract class BaseRepositoryTablePage<
         refresh();
     }
 
+    protected List<SortOrder> getDefaultSortOrders() {
+        return List.of(new SortOrder("id", SortOrder.Direction.DESC));
+    }
+
+
     public void presetPredicate() {
         // 子类可注入默认 Predicate 逻辑
     }
 
     public void setDefaultFromModel(F defaultFromModel) {
-        formInstance.setDefaultModel(defaultFromModel);
+        createFormInstance.setDefaultModel(defaultFromModel);
+        this.defaultFormModel = defaultFromModel;
+
     }
 
     public Boolean enableUpdate() {
@@ -338,5 +364,9 @@ public abstract class BaseRepositoryTablePage<
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         BasePage.super.beforeEnter(event);
+    }
+
+    public Boolean beforeSave(F f) {
+        return true;
     }
 }

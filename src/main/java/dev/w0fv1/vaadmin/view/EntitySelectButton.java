@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import dev.w0fv1.vaadmin.view.EntitySelectPage.CustomFilter;   // 新增
+
 /**
  * EntitySelectButton
  * 实体选择按钮，支持单选/多选实体，并监听选中变化。
@@ -26,39 +28,108 @@ public class EntitySelectButton<
     private List<ID> selectedItems = new ArrayList<>();
 
     private Class<E> entityType;
-    private Boolean singleSelection;
+    private Boolean singleSelectMode;
+
     @Setter
     private Consumer<List<ID>> onValueChangeListener; // 监听器
 
-    public EntitySelectButton(
-            String title,
-            Class<E> entityClass,
-            Boolean singleSelection,
-            GenericRepository genericRepository,
-            Boolean enabled
-    ) {
-        this(title, entityClass, singleSelection, enabled);
-        setGenericRepository(genericRepository,null);
-    }
+    /**
+     * 浏览模式（true=只浏览，禁止选择，返回空列表）
+     */
+    private boolean browseMode = false;
+
 
     public EntitySelectButton(
+            Boolean enabled,
             String title,
             Class<E> entityClass,
-            Boolean singleSelection,
-            Boolean enabled
+            GenericRepository genericRepository,
+            Boolean singleSelectMode,
+            Boolean focusOnlyMode,
+            Boolean browseMode,
+
+            GenericRepository.PredicateBuilder<E> initPredicate,
+            List<CustomFilter<E>> extraFilters
+
     ) {
         super(title);
         this.title = title;
         this.entityType = entityClass;
-        this.singleSelection = singleSelection;
+        this.singleSelectMode = singleSelectMode;
         this.setEnabled(enabled);
+        this.browseMode = browseMode != null && browseMode;
+        if (genericRepository != null) {
+            setGenericRepository(genericRepository, initPredicate, extraFilters, focusOnlyMode);
+        }
     }
 
-    public void setGenericRepository(GenericRepository genericRepository, GenericRepository.PredicateBuilder<E> predicateBuilder) {
+    /**
+     * ② 阅读模式构造：快速创建“只浏览”按钮（无选择）
+     */
+    public EntitySelectButton(
+            String title,
+            Class<E> entityClass,
+            GenericRepository genericRepository,
+            Boolean focusOnlyMode,
+            GenericRepository.PredicateBuilder<E> initPredicate,
+            List<CustomFilter<E>> extraFilters
+    ) {
+        this(true, title, entityClass, genericRepository, true, focusOnlyMode, false, initPredicate, extraFilters);
+    }
+
+    public EntitySelectButton(
+            String title,
+            Class<E> entityClass,
+            GenericRepository genericRepository,
+            Boolean singleSelectMode,
+            Boolean focusOnlyMode,
+            GenericRepository.PredicateBuilder<E> initPredicate,
+            List<CustomFilter<E>> extraFilters
+    ) {
+        this(true, title, entityClass, genericRepository, singleSelectMode, focusOnlyMode,false , initPredicate, extraFilters);
+    }
+
+
+    public EntitySelectButton(
+            String title,
+            Class<E> entityClass,
+            Boolean singleSelectMode
+    ) {
+        this(true, title, entityClass, null, singleSelectMode, false, null, null, null);
+    }
+
+    public EntitySelectButton(
+            String title,
+            Class<E> entityClass
+    ) {
+        this(true, title, entityClass, null, true, false, null, null, null);
+    }
+
+    public EntitySelectButton(
+            String title,
+            Class<E> entityClass,
+            GenericRepository genericRepository,
+
+            Boolean singleSelectMode
+    ) {
+        this(true, title, entityClass, genericRepository, singleSelectMode, false, null, null, null);
+    }
+    /* -------------------- 配置仓库/页面 -------------------- */
+
+    public void setGenericRepository(
+            GenericRepository genericRepository,
+            GenericRepository.PredicateBuilder<E> predicateBuilder,
+            List<CustomFilter<E>> extraFilters,
+            Boolean focusOnlyMode
+    ) {
         this.dialog = new Dialog();
 
         EntitySelectPage.OnFinish<ID> onFinishCallback = selectedData -> {
-            if (selectedData != null && !selectedData.isEmpty()) {
+            if (selectedData == null){
+                dialog.close();
+                return;
+            }
+            if (!selectedData.isEmpty()) {
                 selectedItems.clear();
                 selectedItems.addAll(new ArrayList<>(selectedData));
                 setText("ID为" + selectedItems + "的" + selectedData.size() + "条数据(点击重选)");
@@ -75,23 +146,45 @@ public class EntitySelectButton<
             dialog.close();
         };
 
+        // 使用带 browseMode 的构造函数
         selectPage = new EntitySelectPage<>(
                 this.entityType,
+                genericRepository,
                 onFinishCallback,
-                this.singleSelection,
-                genericRepository
+                this.singleSelectMode != null && this.singleSelectMode,
+
+                focusOnlyMode != null && focusOnlyMode,
+                this.browseMode,
+                extraFilters
         );
 
         dialog.add(selectPage);
 
         this.addClickListener(event -> {
             if (!isEnabled()) return;
+            // 浏览模式下 setSelectedData 会被页面忽略；保留调用以保持一致性
             selectPage.setSelectedData(selectedItems);
             dialog.open();
         });
-        selectPage.addPermanentFilter("preset", predicateBuilder);
 
+        selectPage.addPermanentFilter("preset", predicateBuilder);
         selectPage.initialize();
+    }
+
+    /* -------------------- 公开方法 -------------------- */
+
+    /**
+     * 运行时切换浏览模式（同步到已创建的页面）
+     */
+    public void setBrowseMode(boolean browseMode) {
+        this.browseMode = browseMode;
+        if (selectPage != null) {
+            selectPage.setBrowseMode(browseMode);
+        }
+    }
+
+    public boolean isBrowseMode() {
+        return browseMode;
     }
 
     public void clear() {
@@ -110,17 +203,11 @@ public class EntitySelectButton<
     }
 
     public void setValue(List<ID> selectedItems) {
-
-        if (selectedItems == null) {
+        if (selectedItems == null || selectedItems.isEmpty()) {
             return;
         }
 
-        if (selectedItems.isEmpty()) {
-            return;
-        }
-
-
-        ID first = selectedItems.getFirst(); // 如果你用的是 Java 8 之前的版本，这里应改为 selectedItems.get(0)
+        ID first = selectedItems.getFirst(); // 如果你用的是 Java 8 之前，请改为 selectedItems.get(0)
 
         if ((first instanceof Number && ((Number) first).longValue() == 0L)) {
             return;
@@ -130,9 +217,7 @@ public class EntitySelectButton<
             return;
         }
 
-
         this.selectedItems.clear();
-
         this.selectedItems.addAll(selectedItems);
 
         if (selectPage != null) {
@@ -147,5 +232,4 @@ public class EntitySelectButton<
             onValueChangeListener.accept(new ArrayList<>(this.selectedItems));
         }
     }
-
 }

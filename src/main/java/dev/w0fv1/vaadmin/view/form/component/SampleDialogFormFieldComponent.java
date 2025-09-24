@@ -55,7 +55,7 @@ public class SampleDialogFormFieldComponent extends BaseDialogFormFieldComponent
     }
 
     @Override
-    public void setData(String data) {
+    public void setInternalData(String data) {
         this.data = (data == null) ? "" : data;
     }
 

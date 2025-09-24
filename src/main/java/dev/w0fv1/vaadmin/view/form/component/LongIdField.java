@@ -67,7 +67,7 @@ public class LongIdField extends BaseFormFieldComponent<Long> {
     }
 
     @Override
-    public void setData(Long data) {
+    public void setInternalData(Long data) {
         this.data = data;
     }
 

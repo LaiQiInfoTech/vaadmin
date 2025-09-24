@@ -37,14 +37,13 @@ public class MultiEntitySelectField<E extends BaseManageEntity<ID>, ID> extends 
         this.entitySelectButton = new EntitySelectButton<>(
                 "选择" + formField.title(),
                 (Class<E>) formEntitySelectField.entityField().entityType(),
-                false, // 这里明确是多选
-                formField.enabled()
+                false // 这里明确是多选
         );
+        this.entitySelectButton.setEnabled(formField.enabled());
 
-        this.entitySelectButton.setGenericRepository(this.genericRepository,
-                formEntitySelectField.enablePredicate() ?
-
-                        ((BaseEntityFormModel) getFormModel()).getEntityPredicateBuilder() : null);
+        this.entitySelectButton.setGenericRepository(
+                this.genericRepository,
+                formEntitySelectField.enablePredicate() ? ((BaseEntityFormModel) getFormModel()).getEntityPredicateBuilder() : null, null, false);
 
         this.entitySelectButton.setOnValueChangeListener(selectedIds -> {
             setData(new ArrayList<>(selectedIds));
@@ -74,7 +73,7 @@ public class MultiEntitySelectField<E extends BaseManageEntity<ID>, ID> extends 
     }
 
     @Override
-    public void setData(List<ID> data) {
+    public void setInternalData(List<ID> data) {
         this.data.clear();
         if (data != null) {
             this.data.addAll(data);

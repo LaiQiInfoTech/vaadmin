@@ -6,6 +6,6 @@ pluginManagement {
         gradlePluginPortal()
     }
     plugins {
-        id("com.vaadin") version "24.7.3"
+        id("com.vaadin") version "24.9.0"
     }
 }

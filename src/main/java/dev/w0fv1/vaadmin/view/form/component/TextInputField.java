@@ -1,5 +1,6 @@
 package dev.w0fv1.vaadmin.view.form.component;
 
+import com.vaadin.flow.component.HasValue;
 import com.vaadin.flow.component.textfield.TextField;
 import dev.w0fv1.vaadmin.view.form.model.BaseFormModel;
 import lombok.extern.slf4j.Slf4j;
@@ -59,7 +60,7 @@ public class TextInputField extends BaseFormFieldComponent<String> {
     }
 
     @Override
-    public void setData(String data) {
+    public void setInternalData(String data) {
         String oldData = this.data;
         this.data = data == null ? "" : data;
         logDebug("setData：由 [{}] 更新为 [{}]", oldData, this.data);
@@ -78,4 +79,5 @@ public class TextInputField extends BaseFormFieldComponent<String> {
             this.textField.clear();
         }
     }
+
 }

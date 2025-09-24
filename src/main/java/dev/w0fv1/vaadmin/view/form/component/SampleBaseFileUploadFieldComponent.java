@@ -1,6 +1,5 @@
 package dev.w0fv1.vaadmin.view.form.component;
 
-import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 import dev.w0fv1.vaadmin.view.form.model.BaseFormModel;
 import lombok.extern.slf4j.Slf4j;
 
@@ -21,8 +20,7 @@ public class SampleBaseFileUploadFieldComponent extends BaseFileUploadFieldCompo
     }
 
     @Override
-    public void handleUploadSucceeded(MemoryBuffer buffer) {
-        String fileName = buffer.getFileName();
+    public void handleUploadSucceeded(byte[] fileContent, String mimeType, String fileName) {
         log.info("上传成功，文件名：{}", fileName);
         setData(fileName);
         pushViewData();
@@ -35,7 +33,7 @@ public class SampleBaseFileUploadFieldComponent extends BaseFileUploadFieldCompo
     }
 
     @Override
-    public void setData(String data) {
+    public void setInternalData(String data) {
         this.url = data;
     }
 

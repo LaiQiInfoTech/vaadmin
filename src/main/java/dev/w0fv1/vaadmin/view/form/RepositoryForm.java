@@ -4,7 +4,6 @@ import com.vaadin.flow.component.notification.NotificationVariant;
 import dev.w0fv1.mapper.Mapper;
 import dev.w0fv1.vaadmin.GenericRepository;
 import dev.w0fv1.vaadmin.entity.BaseManageEntity;
-import dev.w0fv1.vaadmin.test.Echo;
 import dev.w0fv1.vaadmin.view.form.component.*;
 import dev.w0fv1.vaadmin.view.form.model.*;
 import lombok.extern.slf4j.Slf4j;
@@ -28,22 +27,33 @@ public class RepositoryForm<
 
     private final GenericRepository genericRepository;
     private final Runnable onCancel;
-    private final OnSave<ID> onSave;
+    private final Save<ID> save;
+    private BeforeSave<F> beforeSave;
 
 
     private final Boolean isUpdate;
 
-    public RepositoryForm(F fromModel, OnSave<ID> onSave, Runnable onCancel, GenericRepository genericRepository) {
+    public RepositoryForm(F fromModel, Save<ID> save, Runnable onCancel, GenericRepository genericRepository) {
         super(fromModel, fromModel != null && fromModel.getId() != null);
         this.isUpdate = fromModel.getId() != null;
         this.genericRepository = genericRepository;
         this.entityClass = fromModel.getEntityClass();
         this.onCancel = onCancel;
-        this.onSave = onSave;
+        this.save = save;
     }
 
-    public RepositoryForm(Class<F> fromClass, OnSave<ID> onSave, Runnable onCancel, GenericRepository genericRepository) throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
-        this(fromClass.getDeclaredConstructor().newInstance(), onSave, onCancel, genericRepository);
+    public RepositoryForm(F fromModel, BeforeSave<F> beforeSave, Save<ID> save, Runnable onCancel, GenericRepository genericRepository) {
+        super(fromModel, fromModel != null && fromModel.getId() != null);
+        this.isUpdate = fromModel.getId() != null;
+        this.genericRepository = genericRepository;
+        this.entityClass = fromModel.getEntityClass();
+        this.onCancel = onCancel;
+        this.save = save;
+        this.beforeSave = beforeSave;
+    }
+
+    public RepositoryForm(Class<F> fromClass, Save<ID> save, Runnable onCancel, GenericRepository genericRepository) throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
+        this(fromClass.getDeclaredConstructor().newInstance(), save, onCancel, genericRepository);
     }
 
     public RepositoryForm(F fromModel, GenericRepository genericRepository) {
@@ -62,7 +72,7 @@ public class RepositoryForm<
     }
 
     @Override
-    BaseFormFieldComponent<?> extandMapComponent(Field field, F formModel) {
+    BaseFormFieldComponent<?> extendMapComponent(Field field, F formModel) {
 
         FormField formField = field.getAnnotation(FormField.class);
 
@@ -86,7 +96,7 @@ public class RepositoryForm<
 
 
     @Override
-    public Boolean onSave(F fromModel) {
+    public Boolean save(F fromModel) {
 
         log.info(fromModel.toString());
 
@@ -165,8 +175,8 @@ public class RepositoryForm<
                 }
 
 
-                if (onSave != null) {
-                    onSave.run(saveModel.getId());
+                if (save != null) {
+                    save.run(saveModel.getId());
                 }
 
             } catch (Exception e) {
@@ -181,7 +191,6 @@ public class RepositoryForm<
         });
 
 
-
         if (model == null || model.getId() == null) {
             return false;
         }
@@ -190,12 +199,25 @@ public class RepositoryForm<
 
     }
 
-    public interface OnSave<ID> {
+    public interface Save<ID> {
         /**
          * Runs this operation.
          */
         void run(ID id);
     }
 
+    public interface BeforeSave<F> {
+        /**
+         * Runs this operation.
+         */
+        Boolean run(F f);
+    }
 
+    @Override
+    protected boolean beforeSave(F data) {
+        if (beforeSave == null) {
+            return super.beforeSave(data);
+        }
+        return beforeSave.run(data);
+    }
 }

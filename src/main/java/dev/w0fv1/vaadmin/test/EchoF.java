@@ -1,70 +1,57 @@
 package dev.w0fv1.vaadmin.test;
 
-import dev.w0fv1.vaadmin.GenericRepository;
-import dev.w0fv1.vaadmin.view.form.RepositoryMapField;
-import dev.w0fv1.vaadmin.view.form.component.SampleRepositoryDialogFormFieldComponent;
 import dev.w0fv1.vaadmin.view.form.model.*;
-import dev.w0fv1.vaadmin.view.form.UpperCaseConverter;
-import dev.w0fv1.vaadmin.view.form.component.SampleDialogFormFieldComponent;
-import dev.w0fv1.vaadmin.view.form.component.SampleBaseFileUploadFieldComponent;
-import dev.w0fv1.vaadmin.view.form.component.SampleFormFieldComponentBuilder;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.ToString;
+import lombok.EqualsAndHashCode;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
-@ToString
-@NoArgsConstructor
-@FormConfig(title = "回声表单")
-public class EchoF implements BaseFormModel, BaseEntityFormModel<Echo, Long> {
+@EqualsAndHashCode(callSuper = false)
+@FormConfig(title = "Echo 表单", description = "用于编辑 Echo 数据")
+public class EchoF extends BaseEntityFormModel<Echo, Long> {
 
-    @FormField(id = true)
+    @FormField(id = true, onlyUpdate = true, enabled = false)
     private Long id;
 
-    @NotBlank(message = "消息不能为空")
-    @Size(min = 10, max = 255, message = "消息长度必须在10到255个字符之间")
-    @FormField(title = "信息", nullable = false)
+    @FormField(enabled = false, onlyUpdate = true)
+    private String uuid;
+
+    @Size(min = 1, message = "消息不能为空")
+    @FormField(title = "消息", description = "简短消息内容", nullable = false)
     private String message;
 
-    @FormField(title = "长信息", nullable = false)
+    @FormField(title = "长消息", longText = true)
     private String longMessage;
 
+    @FormField(title = "标记", description = "是否标记此条 Echo")
+    private Boolean flag;
 
-    @FormEntitySelectField(
-            entityField = @EntityField(entityType = Echo.class, entityMapper = EchoEntityFieldMapper.ManyToOneEchoFieldMapper.class)
-    )
-    @FormField(title = "多对一", nullable = false)
-    private Long echoId;
+    @FormField(title = "关键词", description = "以英文分号分隔的关键词", subType = String.class)
+    private List<String> keywords = new ArrayList<>();
+
+    @FormEntitySelectField(entityField =@EntityField(entityType = Echo.class, entityMapper = EchoEntityFieldMapper.ParentFieldMapper.class))
+    @FormField(title = "父 Echo ID", description = "可为空，表示父节点")
+    private Long parentId;
+
+    @FormField(title = "状态", defaultValue = "NORMAL")
+    private Echo.Status status = Echo.Status.NORMAL;
+
+    @FormField(title = "创建时间", enabled = false, onlyUpdate = true)
+    private OffsetDateTime createdTime;
+
+    @FormField(title = "更新时间", enabled = false, onlyUpdate = true)
+    private OffsetDateTime updatedTime;
 
 
-    @FormEntitySelectField(
-            entityField = @EntityField(entityType = Echo.class, entityMapper = EchoEntityFieldMapper.ManyToManyEchoesFieldMapper.class)
-    )
-    @FormField(title = "多对多", nullable = false)
-    private List<Long> manyToManyEchoes;
-
-    @FormField(title = "关键词", nullable = false, subType = String.class)
-    private List<String> keywords;
-
-
-    @CustomFormFieldComponent(UserverFileUploadFieldComponent.UserverFileFormFieldComponentBuilder.class)
-    @FormField(title = "商品主图")
-    private String imageUrl;
-    @FormField(title = "状态", nullable = false)
-    private Echo.Status status;
+    public EchoF() {
+    }
 
     public EchoF(String message) {
         this.message = message;
-    }
-
-
-    public EchoF(Echo.Status status) {
-        this.status = status;
     }
 
     @Override
@@ -72,24 +59,19 @@ public class EchoF implements BaseFormModel, BaseEntityFormModel<Echo, Long> {
         Echo echo = new Echo();
         echo.setMessage(message);
         echo.setLongMessage(longMessage);
+        echo.setFlag(flag);
         echo.setKeywords(keywords);
         echo.setStatus(status);
         return echo;
     }
 
     @Override
-    public void translate(Echo model) {
-        model.setMessage(message);
-        model.setLongMessage(longMessage);
-        model.setKeywords(keywords);
-        model.setStatus(status);
+    public void translate(Echo echo) {
+        echo.setMessage(message);
+        echo.setLongMessage(longMessage);
+        echo.setFlag(flag);
+        echo.setKeywords(keywords);
+        echo.setStatus(status);
     }
 
-    @Override
-    public GenericRepository.PredicateBuilder<Echo> getEntityPredicateBuilder() {
-        // 永久过滤：status == NORMAL
-        return (cb, root, predicates) -> predicates.add(
-                cb.equal(root.get("status"), getStatus())
-        );
-    }
 }

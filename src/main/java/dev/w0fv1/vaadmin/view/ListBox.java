@@ -18,4 +18,5 @@ public abstract class ListBox<T> extends Div {
      * Returns the preferred width of this ListBox.
      */
     public abstract String getPreferredWidth();
+
 }

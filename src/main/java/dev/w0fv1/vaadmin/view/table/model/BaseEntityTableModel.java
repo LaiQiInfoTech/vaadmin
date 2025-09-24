@@ -18,6 +18,12 @@ public interface BaseEntityTableModel<
 
     BaseEntityFormModel<E, ID> toFormModel();
 
+    default BaseEntityFormModel<E, ID> toFormModel(BaseEntityFormModel<E, ID> formModel) {
+        BaseEntityFormModel<E, ID> newFormModel = this.toFormModel();
+        newFormModel.loadConfig(formModel);
+        return newFormModel;
+    }
+
     void formEntity(E entity);
 
     @SuppressWarnings("unchecked")

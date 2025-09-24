@@ -1,6 +1,6 @@
 // @ts-nocheck
-import { Debouncer } from '@polymer/polymer/lib/utils/debounce.js';
-import { timeOut, animationFrame } from '@polymer/polymer/lib/utils/async.js';
+import { Debouncer } from '@vaadin/component-base/src/debounce.js';
+import { timeOut, animationFrame } from '@vaadin/component-base/src/async.js';
 import { Grid } from '@vaadin/grid/src/vaadin-grid.js';
 import { isFocusable } from '@vaadin/grid/src/vaadin-grid-active-item-mixin.js';
 import { GridFlowSelectionColumn } from './vaadin-grid-flow-selection-column.js';
@@ -234,7 +234,7 @@ window.Vaadin.Flow.gridConnector.initLazy = (grid) => {
     const delay = grid._hasData ? rootRequestDelay : 0;
 
     rootRequestDebouncer = Debouncer.debounce(rootRequestDebouncer, timeOut.after(delay), () => {
-      grid.$connector.fetchPage((firstIndex, size) => grid.$server.setRequestedRange(firstIndex, size), page, root);
+      grid.$connector.fetchPage((firstIndex, size) => grid.$server.setViewportRange(firstIndex, size), page, root);
     });
   };
 
@@ -734,19 +734,11 @@ window.Vaadin.Flow.gridConnector.initLazy = (grid) => {
 
   grid.$connector.reset = function () {
     cache = {};
-    dataProviderController.rootCache.items = [];
+    dataProviderController.clearCache();
     lastRequestedRanges = {};
-    if (ensureSubCacheDebouncer) {
-      ensureSubCacheDebouncer.cancel();
-    }
-    if (parentRequestDebouncer) {
-      parentRequestDebouncer.cancel();
-    }
-    if (rootRequestDebouncer) {
-      rootRequestDebouncer.cancel();
-    }
-    ensureSubCacheDebouncer = undefined;
-    parentRequestDebouncer = undefined;
+    ensureSubCacheDebouncer?.cancel();
+    parentRequestDebouncer?.cancel();
+    rootRequestDebouncer?.cancel();
     ensureSubCacheQueue = [];
     parentRequestQueue = [];
     updateAllGridRowsInDomBasedOnCache();
@@ -1111,7 +1103,7 @@ window.Vaadin.Flow.gridConnector.initLazy = (grid) => {
     if (
       content.some((node) => {
         // Ignore focus buttons that the component renders into cells in focus button mode on MacOS
-        const focusable = cell._focusButton !== node && isFocusable(node);
+        const focusable = cell?._focusButton !== node && isFocusable(node);
         return focusable || node instanceof HTMLLabelElement;
       })
     ) {

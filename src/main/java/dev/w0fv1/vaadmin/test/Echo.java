@@ -7,7 +7,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -38,16 +40,16 @@ public class Echo implements BaseManageEntity<Long> {
     @Column(name = "long_message")
     private String longMessage;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private Echo parent;
+
     @Column(name = "flag")
     private Boolean flag;
 
-    @Convert(converter = StringListConverter.class)
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "keywords", columnDefinition = "jsonb")
     private List<String> keywords = new ArrayList<>();
-
-    @ElementCollection(targetClass = Label.class, fetch = FetchType.EAGER)
-    @CollectionTable(name = "echo_labels", joinColumns = @JoinColumn(name = "echo_id"))
-    @Enumerated(EnumType.STRING)
-    private List<Label> labels = new ArrayList<>();
 
     @Column(name = "status")
     @Enumerated(EnumType.STRING)
@@ -61,58 +63,10 @@ public class Echo implements BaseManageEntity<Long> {
     @UpdateTimestamp
     private OffsetDateTime updatedTime;
 
-    @JsonIgnore
-    // 多对一关系
-    @ManyToOne
-    @JoinColumn(name = "many_to_one_echo_id")
-    private Echo manyToOneEcho;
-    @JsonIgnore
-    // 一对多关系
-    @OneToMany(mappedBy = "manyToOneEcho", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Echo> oneToManyEchoes = new ArrayList<>();
-    @JsonIgnore
-
-    // 多对多关系
-    @ManyToMany
-    @JoinTable(
-            name = "echo_many_to_many",
-            joinColumns = @JoinColumn(name = "echo_id"),
-            inverseJoinColumns = @JoinColumn(name = "related_echo_id")
-    )
-    private List<Echo> manyToManyEchoes = new ArrayList<>();
-
     public Echo(String message) {
         this.message = message;
     }
 
-    @Converter
-    public static class StringListConverter implements AttributeConverter<List<String>, String> {
-        private static final String SEPARATOR = ";";
-
-        @Override
-        public String convertToDatabaseColumn(List<String> attribute) {
-            if (attribute == null || attribute.isEmpty()) {
-                return ""; // 或者返回 null，取决于你的数据库列是否允许 NULL 和你的偏好
-                // 如果返回 null，convertToEntityAttribute 也需要处理 null
-            }
-            // 过滤掉列表中的 null 或空字符串，避免产生 "a;;b" 这样的情况，除非你特意需要
-            // return attribute.stream()
-            //                 .filter(s -> s != null && !s.isEmpty())
-            //                 .collect(Collectors.joining(SEPARATOR));
-            return String.join(SEPARATOR, attribute); // String.join 会处理 null 元素，但可能不是你想要的方式
-        }
-
-        @Override
-        public List<String> convertToEntityAttribute(String dbData) {
-            if (dbData == null || dbData.isEmpty()) {
-                return new ArrayList<>(); // <--- 关键修改：返回一个空的可变列表
-            }
-            // 使用 Arrays.asList 然后包装成 new ArrayList 确保返回的是可变列表
-            return new ArrayList<>(Arrays.asList(dbData.split(Pattern.quote(SEPARATOR))));
-            // Pattern.quote(SEPARATOR) 是为了防止SEPARATOR是正则表达式特殊字符时产生问题
-            // 如果你确定SEPARATOR永远是简单字符，直接用 dbData.split(SEPARATOR) 也可以
-        }
-    }
 
     public enum Label {
         NEW,

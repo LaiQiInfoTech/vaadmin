@@ -3,16 +3,21 @@ package dev.w0fv1.vaadmin.view.form.component;
 import com.vaadin.flow.component.html.H3;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import dev.w0fv1.vaadmin.util.JsonUtil;
 import dev.w0fv1.vaadmin.util.TypeUtil;
 import dev.w0fv1.vaadmin.view.ErrorMessage;
+import dev.w0fv1.vaadmin.view.form.model.ConditionalDisplay;
 import dev.w0fv1.vaadmin.view.form.model.FormField;
 import dev.w0fv1.vaadmin.view.form.model.BaseFormModel;
-import jakarta.annotation.PostConstruct;
+import dev.w0fv1.vaadmin.view.form.model.FormVisibilityCondition;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.List;
 
 import static dev.w0fv1.vaadmin.component.FieldValidator.validField;
 import static dev.w0fv1.vaadmin.util.TypeUtil.defaultIfNull;
@@ -40,10 +45,35 @@ public abstract class BaseFormFieldComponent<Type> extends VerticalLayout {
     private final FormField formField; // 字段注解
     private ErrorMessage errorMessage = new ErrorMessage(); // 错误提示信息
     private final Boolean autoInitialize; // 是否自动初始化数据
+    private List<FormVisibilityCondition> formVisibilityConditions = new ArrayList<>();
 
     public BaseFormFieldComponent(Field field, BaseFormModel formModel) {
         this(field, formModel, true);
     }
+
+    public void applyFormVisibilityCondition(Field changeField, BaseFormModel baseFormModel) {
+        if (formVisibilityConditions.isEmpty()) return;
+
+        boolean shouldEvaluate = formVisibilityConditions.stream().anyMatch(cond ->
+                changeField == null ||
+                        cond.getDependentFieldNames().isEmpty() ||
+                        cond.getDependentFieldNames().contains(changeField.getName())
+        );
+        if (!shouldEvaluate) return;
+
+        boolean visible = formVisibilityConditions.stream().allMatch(cond -> cond.evaluate(baseFormModel));
+        boolean wasVisible = isVisible();
+        setVisible(visible);
+
+        // 变为可见时，将“模型值”推到UI，避免脱节
+        if (!wasVisible && visible) {
+            pushViewData();
+        }
+
+        // 不再在隐藏时：setData(...); pushViewData(); invokeModelFileData();
+    }
+
+
 
     public BaseFormFieldComponent(Field field, BaseFormModel formModel, Boolean autoInitialize) {
         this.field = field;
@@ -52,9 +82,24 @@ public abstract class BaseFormFieldComponent<Type> extends VerticalLayout {
         this.autoInitialize = autoInitialize;
         this.setPadding(false);
 
+        if (field.isAnnotationPresent(ConditionalDisplay.class)) {
+            try {
+                Class<? extends FormVisibilityCondition>[] conditionClasses =
+                        field.getAnnotation(ConditionalDisplay.class).value();
+                for (Class<? extends FormVisibilityCondition> clazz : conditionClasses) {
+                    formVisibilityConditions.add(clazz.getDeclaredConstructor().newInstance());
+                }
+            } catch (InstantiationException | IllegalAccessException |
+                     InvocationTargetException | NoSuchMethodException e) {
+                log.error("无法创建表单可见性条件实例", e);
+            }
+        } else {
+            // 默认一个永远返回true的条件
+            formVisibilityConditions.add(new FormVisibilityCondition.DefaultFormVisibilityCondition());
+        }
+
         buildTitle();
     }
-
     public void initialize() {
         logDebug("开始初始化组件");
         initStaticView();
@@ -112,10 +157,28 @@ public abstract class BaseFormFieldComponent<Type> extends VerticalLayout {
     public abstract Type getData();
 
     /**
-     * 设置当前组件持有的数据。
-     * 不涉及UI控件。
+     * 设置当前组件持有的数据（模板方法）。
+     * 此方法被设为 final，以确保所有子类的设值操作都会触发监听器。
+     * 子类不应重写此方法，而应实现 setInternalData() 方法。
+     *
+     * @param data 要设置的数据
      */
-    public abstract void setData(Type data);
+    public final void setData(Type data) {
+        String oldDataJson = JsonUtil.toJsonString(getData()); // Optional: for logging
+        setInternalData(data); // 1. 调用子类实现的具体设值逻辑
+        String newDataJson = JsonUtil.toJsonString(getData()); // Optional: for logging
+        logDebug("setData: 数据由 [{}] 更新为 [{}]", oldDataJson, newDataJson);
+        invokeModelFileData();
+        notifyListener();      // 2. 自动通知监听器
+    }
+
+    /**
+     * 抽象方法，由子类实现，用于具体设置内部持有的数据。
+     * 不涉及UI控件或通知逻辑。
+     *
+     * @param data 要设置的数据
+     */
+    protected abstract void setInternalData(Type data);
 
     /**
      * 获取字段默认值。
@@ -219,7 +282,7 @@ public abstract class BaseFormFieldComponent<Type> extends VerticalLayout {
         }
 
         if (validMessage.isEmpty()) {
-            validMessage = validField(field, formModel,getData());
+            validMessage = validField(field, formModel, getData());
         }
 
         if (validMessage != null && !validMessage.isEmpty()) {
@@ -256,5 +319,38 @@ public abstract class BaseFormFieldComponent<Type> extends VerticalLayout {
         }
     }
 
+    public interface FieldValueChangeListener<Type> {
+
+        void valueChanged(Field field, BaseFormModel formModel, Type data);
+    }
+
+
+    public interface FormDataChangeListener {
+
+        void valueChanged(Field field, BaseFormModel formModel);
+    }
+
+    public List<FieldValueChangeListener<Type>> fieldValueChangeListeners = new ArrayList<>();
+
+    public List<FormDataChangeListener> formDataChangeListeners = new ArrayList<>();
+
+    /**
+     * 为组件内部的 Vaadin HasValue 控件添加值变更监听器。
+     *
+     * @param listener 值变更监听器
+     */
+    public void addFieldValueChangeListener(FieldValueChangeListener<Type> listener) {
+        fieldValueChangeListeners.add(listener);
+    }
+
+    public void addFormDataChangeListener(FormDataChangeListener listener) {
+        formDataChangeListeners.add(listener);
+    }
+
+    void notifyListener() {
+
+        fieldValueChangeListeners.forEach(listener -> listener.valueChanged(field, formModel, getData()));
+        formDataChangeListeners.forEach(listener -> listener.valueChanged(field, formModel));
+    }
 
 }

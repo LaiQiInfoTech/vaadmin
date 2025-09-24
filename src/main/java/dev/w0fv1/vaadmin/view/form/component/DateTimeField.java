@@ -69,7 +69,7 @@ public class DateTimeField extends BaseFormFieldComponent<OffsetDateTime> {
     }
 
     @Override
-    public void setData(OffsetDateTime data) {
+    public void setInternalData(OffsetDateTime data) {
         if (data == null) {
             data = OffsetDateTime.now();
         }

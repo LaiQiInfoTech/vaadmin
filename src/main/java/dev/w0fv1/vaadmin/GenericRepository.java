@@ -136,12 +136,21 @@ public class GenericRepository {
 
         // where 条件
         List<jakarta.persistence.criteria.Predicate> preds = pm.buildPredicates(cb, root);
-        if (!preds.isEmpty()) cq.where(preds.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        if (!preds.isEmpty()) {
+            cq.where(preds.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        }
 
         // order by
         if (sortOrders != null && !sortOrders.isEmpty()) {
-            List<Order> orders = sortOrders.stream().map(so -> so.direction == SortOrder.Direction.ASC ? cb.asc(root.get(so.property)) : cb.desc(root.get(so.property))).toList();
+            List<Order> orders = sortOrders.stream()
+                    .map(so -> so.direction == SortOrder.Direction.ASC
+                            ? cb.asc(root.get(so.property))
+                            : cb.desc(root.get(so.property)))
+                    .toList();
             cq.orderBy(orders);
+        } else {
+            // 默认按 id 升序
+            cq.orderBy(cb.asc(root.get("id")));
         }
 
         TypedQuery<T> q = entityManager.createQuery(cq);
@@ -149,6 +158,8 @@ public class GenericRepository {
         q.setMaxResults(size);
         return q.getResultList();
     }
+
+
 
     /* -------------------------------------------------- Total size -------------------------------------------------- */
     @Transactional

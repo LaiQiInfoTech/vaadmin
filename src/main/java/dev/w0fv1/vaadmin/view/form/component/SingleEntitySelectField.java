@@ -39,13 +39,13 @@ public class SingleEntitySelectField<E extends BaseManageEntity<ID>, ID> extends
         this.entitySelectButton = new EntitySelectButton<>(
                 "选择" + title,
                 (Class<E>) formEntitySelectField.entityField().entityType(),
-                isSingle,
-                getFormField().enabled()
+                isSingle
         );
+        this.entitySelectButton.setEnabled(getFormField().enabled());
         this.entitySelectButton.setGenericRepository(this.genericRepository,
                 formEntitySelectField.enablePredicate() ?
 
-                        ((BaseEntityFormModel) getFormModel()).getEntityPredicateBuilder() : null);
+                        ((BaseEntityFormModel) getFormModel()).getEntityPredicateBuilder() : null, null, false);
         add(this.entitySelectButton);
 
         this.entitySelectButton.setOnValueChangeListener(selected -> {
@@ -77,7 +77,7 @@ public class SingleEntitySelectField<E extends BaseManageEntity<ID>, ID> extends
     }
 
     @Override
-    public void setData(ID data) {
+    public void setInternalData(ID data) {
         this.data = data;
     }
 

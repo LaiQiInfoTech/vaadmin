@@ -97,7 +97,7 @@ public class SampleRepositoryDialogFormFieldComponent extends BaseDialogFormFiel
     }
 
     @Override
-    public void setData(Long id) {
+    public void setInternalData(Long id) {
         this.id = id;
     }
 

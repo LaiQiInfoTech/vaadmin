@@ -64,7 +64,7 @@ public class MultiEnumSelectField extends BaseFormFieldComponent<List<Enum<?>>> 
     }
 
     @Override
-    public void setData(List<Enum<?>> data) {
+    public void setInternalData(List<Enum<?>> data) {
         this.data.clear();
         if (data != null) {
             this.data.addAll(data);

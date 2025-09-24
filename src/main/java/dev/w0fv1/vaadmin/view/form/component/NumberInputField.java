@@ -92,7 +92,7 @@ public class NumberInputField<T extends Number> extends BaseFormFieldComponent<T
     }
 
     @Override
-    public void setData(T data) {
+    public void setInternalData(T data) {
         this.data = data;
     }
 
