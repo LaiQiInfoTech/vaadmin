@@ -14,7 +14,7 @@ import java.util.List;
 
 /**
  * MultiEntitySelectField
- * 多选实体选择器，绑定 List<ID> 类型数据。
+ * 多选实体选择器，绑定 {@code List<ID>} 类型数据。
  */
 @Slf4j
 public class MultiEntitySelectField<E extends BaseManageEntity<ID>, ID> extends BaseFormFieldComponent<List<ID>> {

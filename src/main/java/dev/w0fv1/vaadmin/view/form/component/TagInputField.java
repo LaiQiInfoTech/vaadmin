@@ -10,7 +10,7 @@ import java.util.List;
 
 /**
  * TagInputField
- * 多标签输入控件，绑定 List<String> 数据。
+ * 多标签输入控件，绑定 {@code List<String>} 数据。
  */
 @Slf4j
 public class TagInputField extends BaseFormFieldComponent<List<String>> {

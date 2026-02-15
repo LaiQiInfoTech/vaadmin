@@ -23,7 +23,7 @@ import java.util.function.Supplier;
  * 创建时传入图标、标题、数据获取回调以及刷新间隔；组件 attach 后自动启动定时刷新任务，
  * 定时调用回调获取最新字符串并展示。
  *
- * 内部用守护线程池统一调度，UI 更新通过 {@link UI#access(Runnable)} 保证线程安全。
+ * 内部用守护线程池统一调度，UI 更新通过 {@link UI#access} 保证线程安全。
  */
 public class StatsCard extends Composite<Div> {
 

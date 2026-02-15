@@ -8,7 +8,7 @@ import java.lang.reflect.Modifier;
 
 /**
  * SingleEnumSelectBoxField
- * 用于选择单个枚举值的下拉框，绑定 Enum<?> 数据。
+ * 用于选择单个枚举值的下拉框，绑定 {@code Enum<?>} 数据。
  */
 public class SingleEnumSelectBoxField extends BaseFormFieldComponent<Enum<?>> {
 

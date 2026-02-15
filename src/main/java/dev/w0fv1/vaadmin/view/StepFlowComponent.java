@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Step‑by‑step flow component with progress bar, navigation & icons.
+ * Step-by-step flow component with progress bar, navigation and icons.
  */
 public class StepFlowComponent extends VerticalLayout {
 

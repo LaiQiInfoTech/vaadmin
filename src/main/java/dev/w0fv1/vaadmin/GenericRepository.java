@@ -120,7 +120,7 @@ public class GenericRepository {
     }
 
     /**
-     * 带条件 & 排序的分页查询
+     * 带条件和排序的分页查询
      *
      * @param type       实体类型
      * @param page       第几页（从 0）

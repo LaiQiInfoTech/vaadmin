@@ -34,7 +34,7 @@ import static dev.w0fv1.vaadmin.util.TypeUtil.isEmpty;
  * 5. getData()/setData()：只处理数据，不操作任何UI控件；getData()应该返回数据的副本；
  * 6. 支持自动初始化数据，支持清空和校验。
  *
- * @param <Type> 当前字段绑定的数据类型（如 String, List<String>）
+ * @param <Type> 当前字段绑定的数据类型（如 {@code String}, {@code List<String>})
  */
 @Slf4j
 @Getter

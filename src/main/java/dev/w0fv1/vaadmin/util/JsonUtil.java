@@ -32,7 +32,7 @@ public class JsonUtil {
      * 将对象安全转换为HashMap，兼容Hibernate6代理对象
      *
      * @param obj 输入对象
-     * @return HashMap<String, Object>
+     * @return {@code HashMap<String, Object>}
      */
     public static HashMap<String, Object> toHashMap(Object obj) {
         if (obj == null) {

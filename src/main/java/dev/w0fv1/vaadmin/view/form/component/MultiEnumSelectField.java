@@ -10,7 +10,7 @@ import java.util.List;
 
 /**
  * MultiEnumSelectField
- * 多选枚举下拉框，绑定 List<Enum<?>> 类型数据。
+ * 多选枚举下拉框，绑定 {@code List<Enum<?>>} 类型数据。
  */
 public class MultiEnumSelectField extends BaseFormFieldComponent<List<Enum<?>>> {
 
