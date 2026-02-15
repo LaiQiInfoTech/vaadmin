@@ -7,7 +7,7 @@ plugins {
 
 
 group = "dev.w0fv1"
-version = "0.48.8"
+version = "0.48.9"
 
 
 val springBootVersion = "3.5.10"

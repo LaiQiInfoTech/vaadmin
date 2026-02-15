@@ -1,7 +1,6 @@
 package dev.w0fv1.vaadmin.view.form;
 
 import com.vaadin.flow.component.notification.NotificationVariant;
-import dev.w0fv1.mapper.Mapper;
 import dev.w0fv1.vaadmin.GenericRepository;
 import dev.w0fv1.vaadmin.entity.BaseManageEntity;
 import dev.w0fv1.vaadmin.view.form.component.*;
@@ -10,9 +9,11 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 import static dev.w0fv1.vaadmin.view.tools.Notifier.showNotification;
 
@@ -128,18 +129,18 @@ public class RepositoryForm<
 
 
                     Class<? extends BaseManageEntity<?>> entityClass = entityField.entityType();
-                    Mapper mapper = entityField.entityMapper().getDeclaredConstructor().newInstance();
+                    Object mapper = entityField.entityMapper().getDeclaredConstructor().newInstance();
 
                     declaredField.setAccessible(true);
 
                     if (declaredField.getType().equals(List.class)) {
                         List<ID> ids = (List<ID>) declaredField.get(fromModel);
                         List entities = genericRepository.findAll(ids, entityClass);
-                        mapper.accept(saveModel, entities);
+                        applyMapper(mapper, saveModel, entities);
                     } else {
                         ID id = (ID) declaredField.get(fromModel);
                         if (id == null && fromField.nullable()) {
-                            mapper.accept(saveModel, null);
+                            applyMapper(mapper, saveModel, null);
                             continue;
                         }
                         if (id == null) {
@@ -152,7 +153,7 @@ public class RepositoryForm<
 
 
                         Object entity = genericRepository.find(id, entityClass);
-                        mapper.accept(saveModel, entity);
+                        applyMapper(mapper, saveModel, entity);
                     }
                 }
                 saveModel = genericRepository.save(saveModel);
@@ -197,6 +198,43 @@ public class RepositoryForm<
         showNotification("保存成功！", NotificationVariant.LUMO_SUCCESS);
         return true;
 
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void applyMapper(Object mapper, Object target, Object value) throws Exception {
+        if (mapper == null) {
+            throw new IllegalArgumentException("entityMapper instance is null");
+        }
+
+        if (mapper instanceof BiConsumer<?, ?> biConsumer) {
+            ((BiConsumer) biConsumer).accept(target, value);
+            return;
+        }
+
+        // Most mapper-style APIs use an `accept(target, value)` method (e.g. BiConsumer-like).
+        // Use reflection to avoid coupling to a specific upstream mapper interface/package.
+        Method accept;
+        try {
+            accept = mapper.getClass().getMethod("accept", Object.class, Object.class);
+        } catch (NoSuchMethodException ignored) {
+            accept = null;
+        }
+
+        if (accept == null) {
+            // fallback: any "accept" method with 2 parameters
+            for (Method m : mapper.getClass().getMethods()) {
+                if (!m.getName().equals("accept")) continue;
+                if (m.getParameterCount() != 2) continue;
+                accept = m;
+                break;
+            }
+        }
+
+        if (accept == null) {
+            throw new NoSuchMethodException("Mapper has no accept(target, value): " + mapper.getClass().getName());
+        }
+
+        accept.invoke(mapper, target, value);
     }
 
     public interface Save<ID> {
