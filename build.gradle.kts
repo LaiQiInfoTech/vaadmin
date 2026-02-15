@@ -7,7 +7,7 @@ plugins {
 
 
 group = "dev.w0fv1"
-version = "0.48.5"
+version = "0.48.6"
 
 
 val springBootVersion = "3.5.10"
@@ -100,6 +100,12 @@ tasks.test {
 }
 tasks.jar {
     exclude("dev/w0fv1/vaadmin/test/**") // 忽略单个类
+}
+
+// Gradle 9 task validation: sourcesJar may include Vaadin generated sources under build/vaadin-generated.
+// Declare the task dependency explicitly to avoid implicit dependency validation failures in CI.
+tasks.named<Jar>("sourcesJar") {
+    dependsOn("vaadinPrepareFrontend")
 }
 
 
