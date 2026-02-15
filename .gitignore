@@ -4,7 +4,16 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+# Vaadin / frontend generated & build artifacts (should not be committed)
+src/main/frontend/generated/jar-resources/
+src/main/frontend/generated/flow/
+src/main/bundles/
+
+# Logs / OS
+*.log
+
 ### IntelliJ IDEA ###
+.idea/
 .idea/modules.xml
 .idea/jarRepositories.xml
 .idea/compiler.xml
