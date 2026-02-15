@@ -7,7 +7,7 @@ plugins {
 
 
 group = "dev.w0fv1"
-version = "0.48.6"
+version = "0.48.7"
 
 
 val springBootVersion = "3.5.10"
@@ -115,8 +115,6 @@ publishing {
     publications {
         create<MavenPublication>("mavenJava") {
             from(components["java"])
-            artifact(tasks.named("sourcesJar").get())
-            artifact(tasks.named("javadocJar").get())
             pom {
                 name.set("Vaadmin")
                 description.set("Vaadmin is a back-end management framework based on Vaadin.")
