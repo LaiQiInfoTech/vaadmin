@@ -7,7 +7,7 @@ plugins {
 
 
 group = "dev.w0fv1"
-version = "0.48.7"
+version = "0.48.8"
 
 
 val springBootVersion = "3.5.10"
@@ -84,8 +84,8 @@ dependencies {
 
     // Excel (Apache POI) - 读取 .xlsx
     implementation("org.apache.poi:poi-ooxml:5.5.1")
-    implementation("dev.w0fv1:fmapper:0.0.5")
-    annotationProcessor("dev.w0fv1:fmapper:0.0.5")
+    implementation("dev.w0fv1:fmapper:0.1.0")
+    annotationProcessor("dev.w0fv1:fmapper:0.1.0")
     runtimeOnly("org.postgresql:postgresql:42.7.9")
     compileOnly("org.projectlombok:lombok:1.18.42")
     annotationProcessor("org.projectlombok:lombok:1.18.42")
